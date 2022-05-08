@@ -1,0 +1,252 @@
+version: '3.8'
+services:
+
+#######################################################PORTAINER###########################################################
+
+  portainer: 
+    container_name: monitor_Portainer
+    image: portainer/portainer
+    volumes:
+      - portainer_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+    ports:
+      - "9000:9000"
+
+#######################################################PORTAINER###########################################################
+
+
+#########################################################MULLVAD############################################################
+
+  gluetun:
+    container_name: mediaRequests_VPN
+    image: qmcgaw/gluetun:latest
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      # QBT UI Port
+      - 8090:8090
+      # Web port
+      - 8080:8080
+      # Sonarr port
+      - 8989:8989
+      # Radarr port
+      - 7878:7878
+      # Lidarr port
+      - 8686:8686
+      # Jackett Port
+      - 9117:9117
+      # OMBI Port
+      - 3579:3579    
+    volumes:
+      - mullvadVPN:/gluetun
+      - /volume1/@docker/volumes/config_mullvadVPN/_data/mullvad_wireguard_linux_us_chi:/data/vpn
+    environment:
+      - VPN_SERVICE_PROVIDER=mullvad
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=<variable>
+      - WIREGUARD_ADDRESSES=<variable>
+      - SERVER_CITIES=Chicago IL
+    restart: always  
+    
+#########################################################MULLVAD############################################################
+
+
+#######################################################QBITTORRENT##########################################################
+
+  qbittorrent:
+    container_name: mediaRequests_QBT
+    image: linuxserver/qbittorrent:latest
+    environment:
+      - PGID=101
+      - PUID=1027
+      - TZ=America/Chicago
+      - WEBUI_PORT=8090
+      - INCOMING_PORT_ENV=8999
+    volumes:
+      - qbittorrent_data:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /volume1/labnas/Media/Games:/games:rw
+      - /volume1/labnas/Media/Movies:/movies:rw
+      - /volume1/labnas/Media/Music:/music:rw
+      - /volume1/labnas/Media/Pictures:/pictures:rw
+      - /volume1/labnas/Media/Purgatory:/Download      
+      - /volume1/labnas/Media/TV:/tv:rw
+    network_mode: container:mediaRequests_VPN
+    restart: always
+    depends_on:
+      - gluetun
+      - ombi
+
+#######################################################QBITTORRENT##########################################################
+
+
+#########################################################PLEX##############################################################
+  plex:
+    container_name: mediaRequests_Plex
+    image: linuxserver/plex:latest
+    network_mode: host
+    environment:
+      - PGID=101
+      - PUID=1027
+      - VERSION=latest
+      #- PLEX_CLAIM=<variable>
+    volumes:
+      - plex_data:/config
+      - /volume1/labnas/Media/Games:/games:rw
+      - /volume1/labnas/Media/Movies:/movies:rw
+      - /volume1/labnas/Media/Music:/music:rw
+      - /volume1/labnas/Media/Pictures:/pictures:rw
+      - /volume1/labnas/Media/TV:/tv:rw
+      - /volume1/labnas/Media/Purgatory:/Download
+    restart: always
+    privileged: true
+
+#########################################################PLEX##############################################################
+
+
+########################################################LIDARR#############################################################
+
+  lidarr:
+    container_name: mediaRequests_Lidarr
+    image: linuxserver/lidarr
+    environment:
+      - PUID=1027
+      - PGID=101
+      - TZ=America/Chicago
+    volumes:
+      - lidarr_data:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /volume1/labnas/Media/Games:/games:rw
+      - /volume1/labnas/Media/Movies:/movies:rw
+      - /volume1/labnas/Media/Music:/music:rw
+      - /volume1/labnas/Media/Pictures:/pictures:rw
+      - /volume1/labnas/Media/Purgatory:/Download      
+      - /volume1/labnas/Media/TV:/tv:rw
+     
+      
+    restart: unless-stopped
+    network_mode: container:mediaRequests_VPN
+    depends_on:
+      - qbittorrent
+      - ombi
+########################################################LIDARR#############################################################
+
+
+########################################################RADARR#############################################################
+
+  radarr:
+    container_name: mediaRequests_Radarr
+    image: linuxserver/radarr:latest
+    environment:
+      - PUID=1027
+      - PGID=101
+      - TZ=America/Chicago
+    volumes:
+      - radarr_data:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /volume1/labnas/Media/Games:/games:rw
+      - /volume1/labnas/Media/Movies:/movies:rw
+      - /volume1/labnas/Media/Music:/music:rw
+      - /volume1/labnas/Media/Pictures:/pictures:rw
+      - /volume1/labnas/Media/Purgatory:/Download      
+      - /volume1/labnas/Media/TV:/tv:rw
+    restart: unless-stopped
+    network_mode: container:mediaRequests_VPN
+    depends_on:
+      - qbittorrent
+      - ombi
+########################################################RADARR#############################################################
+
+
+########################################################SONARR#############################################################
+
+  sonarr:
+    container_name: mediaRequests_Sonarr
+    image: linuxserver/sonarr:latest
+    environment:
+      - PUID=1027
+      - PGID=101
+      - TZ=America/Chicago
+    volumes:
+      - sonarr_data:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /volume1/labnas/Media/Games:/games:rw
+      - /volume1/labnas/Media/Movies:/movies:rw
+      - /volume1/labnas/Media/Music:/music:rw
+      - /volume1/labnas/Media/Pictures:/pictures:rw
+      - /volume1/labnas/Media/Purgatory:/Download      
+      - /volume1/labnas/Media/TV:/tv:rw
+    restart: unless-stopped
+    network_mode: container:mediaRequests_VPN
+    depends_on:
+      - gluetun
+      - ombi
+########################################################SONARR#############################################################
+
+
+#########################################################OMBI##############################################################
+
+  ombi:
+    image: lscr.io/linuxserver/ombi:latest
+    container_name: mediaRequests_OMBI
+    environment:
+      - PUID=1027
+      - PGID=101
+      - TZ=America/Chicago
+    volumes:
+      - OMBI_data:/config
+    restart: unless-stopped
+    network_mode: container:mediaRequests_VPN
+    depends_on:
+      - gluetun
+
+#########################################################OMBI##############################################################
+
+
+########################################################JACKETT############################################################
+
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: mediaRequests_Jackett
+    environment:
+      - PUID=1027
+      - PGID=101
+      - TZ=America/Chicago
+      - AUTO_UPDATE=true #optional
+    volumes:
+      - sonarr_data:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /volume1/labnas/Media/Games:/games:rw
+      - /volume1/labnas/Media/Movies:/movies:rw
+      - /volume1/labnas/Media/Music:/music:rw
+      - /volume1/labnas/Media/Pictures:/pictures:rw
+      - /volume1/labnas/Media/Purgatory:/Download      
+      - /volume1/labnas/Media/TV:/tv:rw
+
+    restart: unless-stopped
+    network_mode: container:mediaRequests_VPN
+    depends_on:
+      - qbittorrent
+      - gluetun
+
+
+
+########################################################JACKETT############################################################
+
+
+##############################################################################################################################
+#########################################################VOLUMES##############################################################
+##############################################################################################################################
+
+volumes:
+  plex_data:
+  portainer_data:
+  mullvadVPN:
+  qbittorrent_data:
+  sonarr_data:
+  radarr_data:
+  lidarr_data:
+  OMBI_data:
